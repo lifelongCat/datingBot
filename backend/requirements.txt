@@ -1,0 +1,15 @@
+alembic==1.15.2
+asyncpg==0.30.0
+celery==5.5.1
+greenlet==3.2.0
+fastapi==0.115.12
+minio==7.2.15
+prometheus_fastapi_instrumentator==7.1.0
+psycopg==3.2.6
+psycopg-binary==3.2.6
+pydantic_settings==2.8.1
+python-multipart==0.0.20
+pytz==2025.2
+redis==5.2.1
+sqlalchemy==2.0.40
+uvicorn==0.34.1

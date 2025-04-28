@@ -1,0 +1,25 @@
+name: CI (Линтер)
+on: [push]
+env:
+  PYTHON_VERSION: 3.11.6
+  FLAKE8_VERSION: 7.0.0
+jobs:
+  flake8:
+    name: Flake8
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Установка Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Установка зависимостей
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8==${{ env.FLAKE8_VERSION }}
+      - name: Запуск flake8 для бэкенда
+        working-directory: ./backend
+        run: flake8 .
+      - name: Запуск flake8 для бота
+        working-directory: ./bot
+        run: flake8 .

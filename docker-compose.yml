@@ -1,0 +1,144 @@
+services:
+  postgres:
+    image: 'postgres:16.2'
+    env_file: .env
+    ports:
+      - "54320:5432"
+    volumes:
+      - postgres-storage:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}" ]
+      interval: 60s
+      timeout: 1s
+      retries: 15
+      start_period: 20s
+      start_interval: 1s
+    restart: always
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z-cpuv1
+    env_file: .env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-storage:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 60s
+      timeout: 1s
+      retries: 15
+      start_period: 20s
+      start_interval: 1s
+    restart: always
+  redis:
+    image: redis:7.4
+    env_file: .env
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-storage:/data
+    command: >
+      sh -c '
+        mkdir -p /usr/local/etc/redis &&
+        echo "bind 0.0.0.0" > /usr/local/etc/redis/redis.conf &&
+        echo "appendonly yes" >> /usr/local/etc/redis/redis.conf &&
+        echo "appendfsync everysec" >> /usr/local/etc/redis/redis.conf &&
+        echo "user default off nopass nocommands" > /usr/local/etc/redis/users.acl &&
+        echo "user $REDIS_USER on >$REDIS_PASSWORD allcommands allkeys allchannels" >> /usr/local/etc/redis/users.acl &&
+        redis-server /usr/local/etc/redis/redis.conf --aclfile /usr/local/etc/redis/users.acl
+      '
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--user", "$REDIS_USER", "--pass", "$REDIS_PASSWORD", "ping" ]
+      interval: 60s
+      timeout: 1s
+      retries: 15
+      start_period: 20s
+      start_interval: 1s
+    restart: always
+  rabbitmq:
+    image: rabbitmq:4.1.0-management
+    env_file: .env
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 60s
+      timeout: 2s
+      retries: 30
+      start_period: 30s
+      start_interval: 1s
+    restart: always
+  celery-worker:
+    build: backend
+    command: "celery -A app.rating_updater.celery worker --loglevel=info"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+  celery-beat:
+    build: backend
+    command: "celery -A app.rating_updater.celery beat --loglevel=info"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+  backend:
+    build: backend
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "localhost:8080/test" ]
+      interval: 60s
+      timeout: 1s
+      retries: 15
+      start_period: 20s
+      start_interval: 1s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+  bot:
+    build: bot
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+  prometheus:
+    image: 'prom/prometheus:v3.3.0'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+  grafana:
+    image: 'grafana/grafana-oss:11.6.1'
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    restart: always
+
+volumes:
+  postgres-storage:
+  minio-storage:
+  redis-storage:
+  grafana-storage:
